@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { ArchiveRestore, ChevronRight, X } from '@lucide/svelte';
 	import {
+		bundlesChangedEvent,
 		pendingBundlesStorageKey,
 		readCurrentUserId,
 		type Bundle,
@@ -92,7 +93,7 @@
 			);
 			const storedRows = readStoredRows();
 			bundles = storedRows ?? createRows(loadedBundles);
-			expandedBundleIds = new Set(bundles.map((bundle) => bundle.id));
+			expandedBundleIds = new Set();
 			loadState = 'idle';
 		} catch (error) {
 			loadState = 'error';
@@ -214,6 +215,7 @@
 			}
 
 			sessionStorage.removeItem(pendingBundlesStorageKey);
+			window.dispatchEvent(new CustomEvent(bundlesChangedEvent));
 			await loadBundles();
 		} catch (error) {
 			loadState = 'error';
