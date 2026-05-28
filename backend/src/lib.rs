@@ -15,10 +15,24 @@ impl AppState {
     }
 }
 
+#[derive(Debug, Serialize, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "TEXT", rename_all = "snake_case")]
+pub enum QuantityType {
+    Count,
+    Grams,
+    Ounces,
+    Pounds,
+    Liters,
+    Milliliters,
+    Gallons,
+}
+
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct InventoryItem {
     pub item: String,
-    pub quantity: i64,
+    pub quantity: f64,
+    pub quantity_type: QuantityType,
 }
 
 pub async fn create_pool(database_url: &str) -> Result<SqlitePool, sqlx::Error> {
@@ -45,7 +59,7 @@ async fn list_inventory(
 ) -> Result<Json<Vec<InventoryItem>>, axum::http::StatusCode> {
     let items = sqlx::query_as::<_, InventoryItem>(
         r#"
-        SELECT item, quantity
+        SELECT item, quantity, quantity_type
         FROM inventory
         ORDER BY item COLLATE NOCASE
         "#,
@@ -103,7 +117,8 @@ mod tests {
 
         assert!(json.as_array().unwrap().iter().any(|row| {
             row.get("item") == Some(&Value::String("Canned tomatoes".to_owned()))
-                && row.get("quantity") == Some(&Value::Number(24.into()))
+                && row.get("quantity").and_then(Value::as_f64) == Some(24.0)
+                && row.get("quantity_type") == Some(&Value::String("count".to_owned()))
         }));
     }
 }
