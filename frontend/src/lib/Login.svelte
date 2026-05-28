@@ -25,7 +25,7 @@
 		if (!selectedUserId) return;
 
 		setCurrentUserId(selectedUserId);
-		void goto('/bundles');
+		void goto('/inventory');
 	}
 </script>
 

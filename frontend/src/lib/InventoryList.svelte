@@ -1,6 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { readCurrentUserId, requestStorageKey, type NewBundle } from '$lib/bundles';
+	import {
+		bundlesChangedEvent,
+		readCurrentUserId,
+		requestStorageKey,
+		type NewBundle
+	} from '$lib/bundles';
 	import { quantityTypeLabels, type InventoryItem } from '$lib/inventory';
 
 	type Props = {
@@ -123,6 +128,7 @@
 			}
 
 			cancelRequest();
+			window.dispatchEvent(new CustomEvent(bundlesChangedEvent));
 		} catch (error) {
 			requestState = 'error';
 			errorMessage = error instanceof Error ? error.message : 'Bundle request failed.';

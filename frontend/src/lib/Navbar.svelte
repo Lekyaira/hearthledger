@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
-	import { LogIn } from '@lucide/svelte';
+	import { LogIn, ShelvingUnit } from '@lucide/svelte';
 	import { readCurrentUserId, userChangedEvent } from '$lib/auth';
 	import Logout from '$lib/Logout.svelte';
 	import PendingBundlesIcon from '$lib/PendingBundlesIcon.svelte';
@@ -30,6 +30,14 @@
 
 		<div class="flex items-center gap-2">
 			{#if userId}
+				<button
+					type="button"
+					class="flex size-10 items-center justify-center rounded border border-zinc-300 text-zinc-900"
+					aria-label="Inventory"
+					onclick={() => goto('/inventory')}
+				>
+					<ShelvingUnit size={22} aria-hidden="true" />
+				</button>
 				<PendingBundlesIcon />
 				<Logout />
 			{:else}

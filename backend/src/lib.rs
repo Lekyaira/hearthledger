@@ -68,6 +68,24 @@ pub struct NewInventoryItem {
 pub struct User {
     pub id: String,
     pub name: String,
+    pub role: UserRole,
+}
+
+#[derive(Debug, Deserialize, Serialize, sqlx::Type)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "TEXT", rename_all = "snake_case")]
+pub enum UserRole {
+    Member,
+    Admin,
+}
+
+impl UserRole {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::Member => "member",
+            Self::Admin => "admin",
+        }
+    }
 }
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
@@ -335,7 +353,7 @@ async fn delete_inventory(
 async fn list_users(State(state): State<AppState>) -> Result<Json<Vec<User>>, StatusCode> {
     let users = sqlx::query_as::<_, User>(
         r#"
-        SELECT id, name
+        SELECT id, name, role
         FROM users
         ORDER BY name COLLATE NOCASE, id COLLATE NOCASE
         "#,
@@ -361,13 +379,14 @@ async fn create_users(
     for new_user in new_users {
         let created_user = sqlx::query_as::<_, User>(
             r#"
-            INSERT INTO users (id, name)
-            VALUES (?, ?)
-            RETURNING id, name
+            INSERT INTO users (id, name, role)
+            VALUES (?, ?, ?)
+            RETURNING id, name, role
             "#,
         )
         .bind(new_user.id)
         .bind(new_user.name)
+        .bind(new_user.role.as_str())
         .fetch_one(&mut *transaction)
         .await
         .map_err(|error| match error {
@@ -404,12 +423,13 @@ async fn update_users(
         let saved_user = sqlx::query_as::<_, User>(
             r#"
             UPDATE users
-            SET name = ?
+            SET name = ?, role = ?
             WHERE id = ?
-            RETURNING id, name
+            RETURNING id, name, role
             "#,
         )
         .bind(updated_user.name)
+        .bind(updated_user.role.as_str())
         .bind(updated_user.id)
         .fetch_optional(&mut *transaction)
         .await
@@ -1056,7 +1076,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn users_endpoint_returns_empty_list() {
+    async fn users_endpoint_returns_seeded_test_users() {
         let response = app(test_pool().await)
             .oneshot(
                 Request::builder()
@@ -1072,7 +1092,19 @@ mod tests {
         let body = response.into_body().collect().await.unwrap().to_bytes();
         let json: Value = serde_json::from_slice(&body).unwrap();
 
-        assert_eq!(json.as_array().unwrap().len(), 0);
+        let users = json.as_array().unwrap();
+
+        assert_eq!(users.len(), 2);
+        assert!(users.iter().any(|row| {
+            row.get("id") == Some(&Value::String("usr_member".to_owned()))
+                && row.get("name") == Some(&Value::String("Test Member".to_owned()))
+                && row.get("role") == Some(&Value::String("member".to_owned()))
+        }));
+        assert!(users.iter().any(|row| {
+            row.get("id") == Some(&Value::String("usr_admin".to_owned()))
+                && row.get("name") == Some(&Value::String("Test Admin".to_owned()))
+                && row.get("role") == Some(&Value::String("admin".to_owned()))
+        }));
     }
 
     #[tokio::test]
@@ -1088,11 +1120,13 @@ mod tests {
                         [
                             {
                                 "id": "usr_alex",
-                                "name": "Alex"
+                                "name": "Alex",
+                                "role": "member"
                             },
                             {
                                 "id": "usr_blair",
-                                "name": "Blair"
+                                "name": "Blair",
+                                "role": "admin"
                             }
                         ]
                         "#,
@@ -1112,10 +1146,12 @@ mod tests {
         assert!(users.iter().any(|row| {
             row.get("id") == Some(&Value::String("usr_alex".to_owned()))
                 && row.get("name") == Some(&Value::String("Alex".to_owned()))
+                && row.get("role") == Some(&Value::String("member".to_owned()))
         }));
         assert!(users.iter().any(|row| {
             row.get("id") == Some(&Value::String("usr_blair".to_owned()))
                 && row.get("name") == Some(&Value::String("Blair".to_owned()))
+                && row.get("role") == Some(&Value::String("admin".to_owned()))
         }));
     }
 
@@ -1135,7 +1171,8 @@ mod tests {
                         [
                             {
                                 "id": "usr_alex",
-                                "name": "Alex"
+                                "name": "Alex",
+                                "role": "member"
                             }
                         ]
                         "#,
@@ -1158,7 +1195,8 @@ mod tests {
                         [
                             {
                                 "id": "usr_alex",
-                                "name": "Alex Updated"
+                                "name": "Alex Updated",
+                                "role": "admin"
                             }
                         ]
                         "#,
@@ -1187,11 +1225,13 @@ mod tests {
                         [
                             {
                                 "id": "usr_alex",
-                                "name": "Alex"
+                                "name": "Alex",
+                                "role": "member"
                             },
                             {
                                 "id": "usr_blair",
-                                "name": "Blair"
+                                "name": "Blair",
+                                "role": "member"
                             }
                         ]
                         "#,
@@ -1214,11 +1254,13 @@ mod tests {
                         [
                             {
                                 "id": "usr_alex",
-                                "name": "Alex Morgan"
+                                "name": "Alex Morgan",
+                                "role": "admin"
                             },
                             {
                                 "id": "usr_blair",
-                                "name": "Blair Chen"
+                                "name": "Blair Chen",
+                                "role": "member"
                             }
                         ]
                         "#,
@@ -1238,10 +1280,12 @@ mod tests {
         assert!(users.iter().any(|row| {
             row.get("id") == Some(&Value::String("usr_alex".to_owned()))
                 && row.get("name") == Some(&Value::String("Alex Morgan".to_owned()))
+                && row.get("role") == Some(&Value::String("admin".to_owned()))
         }));
         assert!(users.iter().any(|row| {
             row.get("id") == Some(&Value::String("usr_blair".to_owned()))
                 && row.get("name") == Some(&Value::String("Blair Chen".to_owned()))
+                && row.get("role") == Some(&Value::String("member".to_owned()))
         }));
     }
 
@@ -1258,7 +1302,8 @@ mod tests {
                         [
                             {
                                 "id": "usr_missing",
-                                "name": "Missing User"
+                                "name": "Missing User",
+                                "role": "member"
                             }
                         ]
                         "#,
@@ -1287,7 +1332,8 @@ mod tests {
                         [
                             {
                                 "id": "usr_alex",
-                                "name": "Alex"
+                                "name": "Alex",
+                                "role": "member"
                             }
                         ]
                         "#,
@@ -1311,7 +1357,8 @@ mod tests {
                         [
                             {
                                 "id": "usr_alex",
-                                "name": "Alex"
+                                "name": "Alex",
+                                "role": "member"
                             }
                         ]
                         "#,
@@ -1336,13 +1383,13 @@ mod tests {
         let body = response.into_body().collect().await.unwrap().to_bytes();
         let json: Value = serde_json::from_slice(&body).unwrap();
 
-        assert_eq!(json.as_array().unwrap().len(), 0);
+        assert_eq!(json.as_array().unwrap().len(), 2);
     }
 
     #[tokio::test]
     async fn bundle_endpoint_creates_lists_and_selects_bundle_items() {
         let pool = test_pool().await;
-        sqlx::query("INSERT INTO users (id, name) VALUES ('usr_alex', 'Alex')")
+        sqlx::query("INSERT INTO users (id, name, role) VALUES ('usr_alex', 'Alex', 'member')")
             .execute(&pool)
             .await
             .unwrap();
@@ -1462,7 +1509,7 @@ mod tests {
     #[tokio::test]
     async fn bundle_endpoint_fulfillment_removes_items_from_inventory() {
         let pool = test_pool().await;
-        sqlx::query("INSERT INTO users (id, name) VALUES ('usr_blair', 'Blair')")
+        sqlx::query("INSERT INTO users (id, name, role) VALUES ('usr_blair', 'Blair', 'member')")
             .execute(&pool)
             .await
             .unwrap();
@@ -1563,7 +1610,7 @@ mod tests {
     #[tokio::test]
     async fn inventory_endpoint_subtracts_pending_bundle_quantities() {
         let pool = test_pool().await;
-        sqlx::query("INSERT INTO users (id, name) VALUES ('usr_casey', 'Casey')")
+        sqlx::query("INSERT INTO users (id, name, role) VALUES ('usr_casey', 'Casey', 'member')")
             .execute(&pool)
             .await
             .unwrap();
@@ -1628,8 +1675,8 @@ mod tests {
         let pool = test_pool().await;
         sqlx::query(
             r#"
-            INSERT INTO users (id, name)
-            VALUES ('usr_drew', 'Drew'), ('usr_ellis', 'Ellis')
+            INSERT INTO users (id, name, role)
+            VALUES ('usr_drew', 'Drew', 'member'), ('usr_ellis', 'Ellis', 'member')
             "#,
         )
         .execute(&pool)

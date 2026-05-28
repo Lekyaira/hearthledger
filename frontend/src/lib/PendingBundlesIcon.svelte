@@ -2,7 +2,8 @@
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import { Handbag } from '@lucide/svelte';
-	import { readCurrentUserId, type Bundle } from '$lib/bundles';
+	import { userChangedEvent } from '$lib/auth';
+	import { bundlesChangedEvent, readCurrentUserId, type Bundle } from '$lib/bundles';
 
 	type Props = {
 		apiPath?: string;
@@ -14,6 +15,15 @@
 
 	onMount(() => {
 		void loadOpenBundleCount();
+		window.addEventListener(bundlesChangedEvent, loadOpenBundleCount);
+		window.addEventListener(userChangedEvent, loadOpenBundleCount);
+		window.addEventListener('storage', loadOpenBundleCount);
+
+		return () => {
+			window.removeEventListener(bundlesChangedEvent, loadOpenBundleCount);
+			window.removeEventListener(userChangedEvent, loadOpenBundleCount);
+			window.removeEventListener('storage', loadOpenBundleCount);
+		};
 	});
 
 	async function loadOpenBundleCount() {
