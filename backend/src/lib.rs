@@ -51,6 +51,7 @@ impl QuantityType {
 
 #[derive(Debug, Serialize, sqlx::FromRow)]
 pub struct InventoryItem {
+    pub id: i64,
     pub item: String,
     pub quantity: f64,
     pub quantity_type: QuantityType,
@@ -193,6 +194,7 @@ async fn list_inventory(
     let items = sqlx::query_as::<_, InventoryItem>(
         r#"
         SELECT
+            i.id,
             i.item,
             i.quantity - COALESCE(SUM(CASE WHEN b.id IS NOT NULL THEN bi.quantity ELSE 0.0 END), 0.0) AS quantity,
             i.quantity_type
@@ -226,7 +228,7 @@ async fn create_inventory(
             r#"
             INSERT INTO inventory (item, quantity, quantity_type)
             VALUES (?, ?, ?)
-            RETURNING item, quantity, quantity_type
+            RETURNING id, item, quantity, quantity_type
             "#,
         )
         .bind(new_item.item)
@@ -270,7 +272,7 @@ async fn update_inventory(
             UPDATE inventory
             SET quantity = ?, quantity_type = ?
             WHERE item = ?
-            RETURNING item, quantity, quantity_type
+            RETURNING id, item, quantity, quantity_type
             "#,
         )
         .bind(updated_item.quantity)

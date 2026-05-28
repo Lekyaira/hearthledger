@@ -8,6 +8,7 @@ export type QuantityType =
 	| 'gallons';
 
 export type InventoryItem = {
+	id?: number;
 	item: string;
 	quantity: number;
 	quantity_type: QuantityType;
