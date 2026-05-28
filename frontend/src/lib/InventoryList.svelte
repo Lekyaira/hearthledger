@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { InventoryItem, QuantityType } from '$lib/inventory';
+	import { quantityTypeLabels, type InventoryItem } from '$lib/inventory';
 
 	type Props = {
 		items: InventoryItem[];
@@ -10,16 +10,6 @@
 	const numberFormatter = new Intl.NumberFormat(undefined, {
 		maximumFractionDigits: 2
 	});
-
-	const quantityTypeLabels: Record<QuantityType, string> = {
-		count: 'count',
-		grams: 'g',
-		ounces: 'oz',
-		pounds: 'lb',
-		liters: 'L',
-		milliliters: 'mL',
-		gallons: 'gal'
-	};
 
 	function formatQuantity(item: InventoryItem) {
 		return `${numberFormatter.format(item.quantity)} ${quantityTypeLabels[item.quantity_type]}`;
