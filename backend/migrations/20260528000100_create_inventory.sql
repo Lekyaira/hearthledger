@@ -1,0 +1,5 @@
+CREATE TABLE inventory (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    item TEXT NOT NULL UNIQUE,
+    quantity INTEGER NOT NULL DEFAULT 0 CHECK (quantity >= 0)
+);

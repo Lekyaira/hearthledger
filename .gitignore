@@ -1,6 +1,9 @@
 # Backend
 /backend/package/
 /backend/target/
+/backend/*.db
+/backend/*.db-shm
+/backend/*.db-wal
 
 # Frontend
 /frontend/node_modules/
