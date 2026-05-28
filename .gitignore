@@ -10,6 +10,7 @@
 /frontend/.svelte-kit/
 /frontend/build/
 /frontend/.vite/
+/frontend/test-results/
 
 # Log files
 /frontend/npm-debug.log*
