@@ -29,12 +29,4 @@ export type UpdatedBundle = {
 
 export const requestStorageKey = 'hearthledger.bundles.request.pending.v1';
 export const pendingBundlesStorageKey = 'hearthledger.bundles.pending.v1';
-
-export function readCurrentUserId() {
-	return (
-		sessionStorage.getItem('hearthledger.user.id') ??
-		sessionStorage.getItem('user_id') ??
-		sessionStorage.getItem('userId') ??
-		''
-	);
-}
+export { readCurrentUserId } from '$lib/auth';
