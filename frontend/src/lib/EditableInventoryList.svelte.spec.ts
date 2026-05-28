@@ -41,6 +41,21 @@ describe('EditableInventoryList.svelte', () => {
 			.toBeInTheDocument();
 	});
 
+	it('changes the delete button to add when a delete is pending', async () => {
+		render(EditableInventoryList, {
+			items: [{ item: 'Flour', quantity: 4.5, quantity_type: 'pounds' }]
+		});
+
+		const deleteButton = page.getByRole('button', { name: 'Delete Flour' });
+		await expect.element(deleteButton).toHaveTextContent('-');
+
+		await deleteButton.click();
+
+		await expect
+			.element(page.getByRole('button', { name: 'Undelete Flour' }))
+			.toHaveTextContent('+');
+	});
+
 	it('cancels back to the latest committed inventory after update', async () => {
 		vi.spyOn(window, 'fetch').mockImplementation(async (_input, init) => {
 			if (init?.method === 'PUT') {

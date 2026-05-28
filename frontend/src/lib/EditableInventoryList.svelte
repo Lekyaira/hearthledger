@@ -320,7 +320,7 @@
 								: `Delete ${row.item || 'inventory line'}`}
 							onclick={() => toggleDeleted(row)}
 						>
-							-
+							{row.deleted ? '+' : '-'}
 						</button>
 					</div>
 				</li>
