@@ -26,6 +26,14 @@ async fn main() -> anyhow::Result<()> {
 
     let pool = sqlx::sqlite::SqlitePoolOptions::new()
         .max_connections(5)
+        .after_connect(|connection, _metadata| {
+            Box::pin(async move {
+                sqlx::query("PRAGMA foreign_keys = ON")
+                    .execute(connection)
+                    .await?;
+                Ok(())
+            })
+        })
         .connect_with(connect_options)
         .await
         .context("failed to connect to sqlite database")?;
