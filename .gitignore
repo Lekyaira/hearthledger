@@ -1,0 +1,30 @@
+# Backend
+/backend/package/
+/backend/target/
+
+# Frontend
+/frontend/node_modules/
+/frontend/.svelte-kit/
+/frontend/build/
+/frontend/.vite/
+
+# Log files
+/frontend/npm-debug.log*
+/frontend/yarn-debug.log*
+/frontend/yarn-error.log*
+/frontend/pnpm-debug.log*
+
+# Env files
+/backend/.env
+/backend/.env.*
+!/backend/.env.example
+/frontend/.env
+/frontend/.env.*
+!/frontend/.env.example
+
+# Editor / OS noise
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/
