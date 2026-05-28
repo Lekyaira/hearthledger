@@ -11,7 +11,8 @@ run-frontend:
   cd frontend && npm run dev
 
 # Run the backend plus SvelteKit dev server
-dev: run-backend run-frontend 
+dev:
+  mprocs
 
 # Build everything for production
 build:
@@ -37,7 +38,7 @@ clean:
 
 # Run all SvelteKit tests in watch mode.
 test-frontend:
-    cd frondend && npm run test
+    cd frontend && npm run test
 
 # Run all SvelteKit tests once and exit (for CI / pre-commit).
 test-frontend-run:
