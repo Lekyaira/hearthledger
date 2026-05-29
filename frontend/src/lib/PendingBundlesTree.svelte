@@ -38,6 +38,7 @@
 		timeStyle: 'short'
 	});
 	const hasPendingChanges = $derived(bundles.some((bundle) => hasPendingChange(bundle)));
+	const hasCommittableChanges = $derived(bundles.some((bundle) => shouldCommitBundle(bundle)));
 
 	$effect(() => {
 		if (!hasMounted) return;
@@ -169,14 +170,14 @@
 
 	function shouldCommitBundle(bundle: BundleRow) {
 		if (bundle.deleted || bundle.fulfilled_at) return true;
-		if (isAdmin && hasBundleQuantityChange(bundle)) return hasBundleItemDeletion(bundle);
+		if (hasBundleQuantityChange(bundle)) return hasBundleItemDeletion(bundle);
 		return hasPendingChange(bundle);
 	}
 
 	function validateBundles() {
 		for (const bundle of bundles) {
 			if (bundle.deleted || bundle.bundled) continue;
-			if (isAdmin && !bundle.fulfilled_at && hasBundleQuantityChange(bundle)) {
+			if (!bundle.fulfilled_at && hasBundleQuantityChange(bundle)) {
 				if (!hasBundleItemDeletion(bundle)) continue;
 
 				const activeItems = bundle.items.filter((item) => !item.deleted);
@@ -205,6 +206,12 @@
 	}
 
 	async function saveChanges() {
+		if (hasPendingChanges && !hasCommittableChanges) {
+			loadState = 'error';
+			errorMessage = 'Mark the bundle complete before updating quantity changes.';
+			return;
+		}
+
 		const validationMessage = validateBundles();
 		if (validationMessage) {
 			loadState = 'error';
@@ -237,7 +244,7 @@
 						.filter((item) => !item.deleted)
 						.map((item) => ({
 							item_id: item.item_id,
-							quantity: isAdmin && !bundle.fulfilled_at ? item.quantity : Number(item.quantityValue)
+							quantity: bundle.fulfilled_at ? Number(item.quantityValue) : item.quantity
 						}))
 				};
 				const response = await fetch(apiPath, {
@@ -294,7 +301,7 @@
 			<button
 				type="button"
 				class="rounded bg-zinc-950 px-3 py-2 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
-				disabled={!hasPendingChanges || loadState === 'saving'}
+				disabled={!hasCommittableChanges || loadState === 'saving'}
 				onclick={saveChanges}
 			>
 				{loadState === 'saving' ? 'updating...' : 'update'}
