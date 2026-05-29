@@ -4,9 +4,9 @@ const host = '127.0.0.1';
 const port = Number(process.env.E2E_BACKEND_PORT ?? 3100);
 
 const seedUsers = [
-	{ id: 'usr_admin', name: 'Test Admin', role: 'admin' },
-	{ id: 'usr_member', name: 'Test Member', role: 'member' },
-	{ id: 'usr_member_b', name: 'Second Member', role: 'member' }
+	{ id: '1', name: 'Test Member', role: 'member' },
+	{ id: '2', name: 'Test Admin', role: 'admin' },
+	{ id: '3', name: 'Second Member', role: 'member' }
 ];
 
 const seedInventory = [
@@ -20,6 +20,7 @@ const seedInventory = [
 let users;
 let inventory;
 let bundles;
+let nextUserId;
 let nextInventoryId;
 let nextBundleId;
 
@@ -27,6 +28,7 @@ function resetState() {
 	users = structuredClone(seedUsers);
 	inventory = structuredClone(seedInventory);
 	bundles = [];
+	nextUserId = Math.max(...users.map((user) => Number(user.id))) + 1;
 	nextInventoryId = Math.max(...inventory.map((item) => item.id)) + 1;
 	nextBundleId = 1;
 }
@@ -107,6 +109,45 @@ function validateBundleItems(items, excludedBundleId = null) {
 	}
 
 	return true;
+}
+
+async function handleUsers(request, response) {
+	if (request.method === 'GET') {
+		sendJson(response, 200, users);
+		return;
+	}
+
+	const payload = await readJson(request);
+
+	if (request.method === 'POST') {
+		const createdUsers = [];
+
+		for (const user of payload) {
+			const createdUser = { id: String(nextUserId++), name: user.name, role: user.role };
+			users.push(createdUser);
+			createdUsers.push(createdUser);
+		}
+
+		sendJson(response, 201, createdUsers);
+		return;
+	}
+
+	if (request.method === 'DELETE') {
+		for (const user of payload) {
+			const index = users.findIndex((entry) => entry.id === user.id && entry.name === user.name);
+			if (index === -1) {
+				sendJson(response, 404, { message: 'User not found' });
+				return;
+			}
+
+			users.splice(index, 1);
+		}
+
+		sendEmpty(response);
+		return;
+	}
+
+	sendEmpty(response, 405);
 }
 
 async function handleInventory(request, response) {
@@ -265,8 +306,8 @@ const server = http.createServer(async (request, response) => {
 			return;
 		}
 
-		if (url.pathname === '/v1/users' && request.method === 'GET') {
-			sendJson(response, 200, users);
+		if (url.pathname === '/v1/users') {
+			await handleUsers(request, response);
 			return;
 		}
 

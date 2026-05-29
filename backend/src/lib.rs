@@ -71,6 +71,12 @@ pub struct User {
     pub role: UserRole,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct NewUser {
+    pub name: String,
+    pub role: UserRole,
+}
+
 #[derive(Debug, Deserialize, Serialize, sqlx::Type)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "TEXT", rename_all = "snake_case")]
@@ -353,7 +359,7 @@ async fn delete_inventory(
 async fn list_users(State(state): State<AppState>) -> Result<Json<Vec<User>>, StatusCode> {
     let users = sqlx::query_as::<_, User>(
         r#"
-        SELECT id, name, role
+        SELECT CAST(id AS TEXT) AS id, name, role
         FROM users
         ORDER BY name COLLATE NOCASE, id COLLATE NOCASE
         "#,
@@ -367,7 +373,7 @@ async fn list_users(State(state): State<AppState>) -> Result<Json<Vec<User>>, St
 
 async fn create_users(
     State(state): State<AppState>,
-    Json(new_users): Json<Vec<User>>,
+    Json(new_users): Json<Vec<NewUser>>,
 ) -> Result<(StatusCode, Json<Vec<User>>), StatusCode> {
     let mut transaction = state
         .pool
@@ -379,12 +385,11 @@ async fn create_users(
     for new_user in new_users {
         let created_user = sqlx::query_as::<_, User>(
             r#"
-            INSERT INTO users (id, name, role)
-            VALUES (?, ?, ?)
-            RETURNING id, name, role
+            INSERT INTO users (name, role)
+            VALUES (?, ?)
+            RETURNING CAST(id AS TEXT) AS id, name, role
             "#,
         )
-        .bind(new_user.id)
         .bind(new_user.name)
         .bind(new_user.role.as_str())
         .fetch_one(&mut *transaction)
@@ -425,7 +430,7 @@ async fn update_users(
             UPDATE users
             SET name = ?, role = ?
             WHERE id = ?
-            RETURNING id, name, role
+            RETURNING CAST(id AS TEXT) AS id, name, role
             "#,
         )
         .bind(updated_user.name)
@@ -491,7 +496,7 @@ async fn list_bundles(
 ) -> Result<Json<Vec<BundleListEntry>>, StatusCode> {
     let records = sqlx::query_as::<_, BundleRecord>(
         r#"
-        SELECT id, user, created_at, bundled, fulfilled_at
+        SELECT id, CAST(user AS TEXT) AS user, created_at, bundled, fulfilled_at
         FROM bundles
         WHERE fulfilled_at IS NULL
         ORDER BY created_at, id
@@ -529,7 +534,7 @@ async fn create_bundle(
         r#"
         INSERT INTO bundles (user, bundled)
         VALUES (?, ?)
-        RETURNING id, user, created_at, bundled, fulfilled_at
+        RETURNING id, CAST(user AS TEXT) AS user, created_at, bundled, fulfilled_at
         "#,
     )
     .bind(new_bundle.user)
@@ -562,7 +567,7 @@ async fn update_bundle(
 
     let existing_bundle = sqlx::query_as::<_, BundleRecord>(
         r#"
-        SELECT id, user, created_at, bundled, fulfilled_at
+        SELECT id, CAST(user AS TEXT) AS user, created_at, bundled, fulfilled_at
         FROM bundles
         WHERE id = ?
         "#,
@@ -591,7 +596,7 @@ async fn update_bundle(
         UPDATE bundles
         SET user = ?, bundled = ?, fulfilled_at = ?
         WHERE id = ?
-        RETURNING id, user, created_at, bundled, fulfilled_at
+        RETURNING id, CAST(user AS TEXT) AS user, created_at, bundled, fulfilled_at
         "#,
     )
     .bind(updated_bundle.user)
@@ -646,7 +651,7 @@ pub async fn bundle_selection_items(
 ) -> Result<Vec<BundleSelectionItem>, sqlx::Error> {
     sqlx::query_as::<_, BundleSelectionItem>(
         r#"
-        SELECT b.user, bi.item_id, i.item, bi.quantity
+        SELECT CAST(b.user AS TEXT) AS user, bi.item_id, i.item, bi.quantity
         FROM bundles b
         JOIN bundled_items bi ON bi.bundle_id = b.id
         JOIN inventory i ON i.id = bi.item_id
@@ -682,7 +687,7 @@ async fn records_to_bundle_list_entries(
 async fn load_bundle(pool: &SqlitePool, bundle_id: i64) -> Result<Bundle, StatusCode> {
     let record = sqlx::query_as::<_, BundleRecord>(
         r#"
-        SELECT id, user, created_at, bundled, fulfilled_at
+        SELECT id, CAST(user AS TEXT) AS user, created_at, bundled, fulfilled_at
         FROM bundles
         WHERE id = ?
         "#,
@@ -1096,12 +1101,12 @@ mod tests {
 
         assert_eq!(users.len(), 2);
         assert!(users.iter().any(|row| {
-            row.get("id") == Some(&Value::String("usr_member".to_owned()))
+            row.get("id") == Some(&Value::String("1".to_owned()))
                 && row.get("name") == Some(&Value::String("Test Member".to_owned()))
                 && row.get("role") == Some(&Value::String("member".to_owned()))
         }));
         assert!(users.iter().any(|row| {
-            row.get("id") == Some(&Value::String("usr_admin".to_owned()))
+            row.get("id") == Some(&Value::String("2".to_owned()))
                 && row.get("name") == Some(&Value::String("Test Admin".to_owned()))
                 && row.get("role") == Some(&Value::String("admin".to_owned()))
         }));
@@ -1119,12 +1124,10 @@ mod tests {
                         r#"
                         [
                             {
-                                "id": "usr_alex",
                                 "name": "Alex",
                                 "role": "member"
                             },
                             {
-                                "id": "usr_blair",
                                 "name": "Blair",
                                 "role": "admin"
                             }
@@ -1144,69 +1147,15 @@ mod tests {
 
         assert_eq!(users.len(), 2);
         assert!(users.iter().any(|row| {
-            row.get("id") == Some(&Value::String("usr_alex".to_owned()))
+            row.get("id") == Some(&Value::String("3".to_owned()))
                 && row.get("name") == Some(&Value::String("Alex".to_owned()))
                 && row.get("role") == Some(&Value::String("member".to_owned()))
         }));
         assert!(users.iter().any(|row| {
-            row.get("id") == Some(&Value::String("usr_blair".to_owned()))
+            row.get("id") == Some(&Value::String("4".to_owned()))
                 && row.get("name") == Some(&Value::String("Blair".to_owned()))
                 && row.get("role") == Some(&Value::String("admin".to_owned()))
         }));
-    }
-
-    #[tokio::test]
-    async fn users_endpoint_rejects_duplicate_ids() {
-        let app = app(test_pool().await);
-
-        let response = app
-            .clone()
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/v1/users")
-                    .header("content-type", "application/json")
-                    .body(Body::from(
-                        r#"
-                        [
-                            {
-                                "id": "usr_alex",
-                                "name": "Alex",
-                                "role": "member"
-                            }
-                        ]
-                        "#,
-                    ))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::CREATED);
-
-        let response = app
-            .oneshot(
-                Request::builder()
-                    .method("POST")
-                    .uri("/v1/users")
-                    .header("content-type", "application/json")
-                    .body(Body::from(
-                        r#"
-                        [
-                            {
-                                "id": "usr_alex",
-                                "name": "Alex Updated",
-                                "role": "admin"
-                            }
-                        ]
-                        "#,
-                    ))
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
-
-        assert_eq!(response.status(), StatusCode::CONFLICT);
     }
 
     #[tokio::test]
@@ -1224,12 +1173,10 @@ mod tests {
                         r#"
                         [
                             {
-                                "id": "usr_alex",
                                 "name": "Alex",
                                 "role": "member"
                             },
                             {
-                                "id": "usr_blair",
                                 "name": "Blair",
                                 "role": "member"
                             }
@@ -1253,12 +1200,12 @@ mod tests {
                         r#"
                         [
                             {
-                                "id": "usr_alex",
+                                "id": "3",
                                 "name": "Alex Morgan",
                                 "role": "admin"
                             },
                             {
-                                "id": "usr_blair",
+                                "id": "4",
                                 "name": "Blair Chen",
                                 "role": "member"
                             }
@@ -1278,12 +1225,12 @@ mod tests {
 
         assert_eq!(users.len(), 2);
         assert!(users.iter().any(|row| {
-            row.get("id") == Some(&Value::String("usr_alex".to_owned()))
+            row.get("id") == Some(&Value::String("3".to_owned()))
                 && row.get("name") == Some(&Value::String("Alex Morgan".to_owned()))
                 && row.get("role") == Some(&Value::String("admin".to_owned()))
         }));
         assert!(users.iter().any(|row| {
-            row.get("id") == Some(&Value::String("usr_blair".to_owned()))
+            row.get("id") == Some(&Value::String("4".to_owned()))
                 && row.get("name") == Some(&Value::String("Blair Chen".to_owned()))
                 && row.get("role") == Some(&Value::String("member".to_owned()))
         }));
@@ -1301,7 +1248,7 @@ mod tests {
                         r#"
                         [
                             {
-                                "id": "usr_missing",
+                                "id": "99",
                                 "name": "Missing User",
                                 "role": "member"
                             }
@@ -1331,7 +1278,6 @@ mod tests {
                         r#"
                         [
                             {
-                                "id": "usr_alex",
                                 "name": "Alex",
                                 "role": "member"
                             }
@@ -1356,7 +1302,7 @@ mod tests {
                         r#"
                         [
                             {
-                                "id": "usr_alex",
+                                "id": "3",
                                 "name": "Alex",
                                 "role": "member"
                             }
@@ -1389,10 +1335,12 @@ mod tests {
     #[tokio::test]
     async fn bundle_endpoint_creates_lists_and_selects_bundle_items() {
         let pool = test_pool().await;
-        sqlx::query("INSERT INTO users (id, name, role) VALUES ('usr_alex', 'Alex', 'member')")
-            .execute(&pool)
-            .await
-            .unwrap();
+        let user_id: i64 = sqlx::query_scalar(
+            "INSERT INTO users (name, role) VALUES ('Alex', 'member') RETURNING id",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
 
         let tomatoes_id: i64 =
             sqlx::query_scalar("SELECT id FROM inventory WHERE item = 'Canned tomatoes'")
@@ -1411,7 +1359,7 @@ mod tests {
                     .body(Body::from(format!(
                         r#"
                         {{
-                            "user": "usr_alex",
+                            "user": "{user_id}",
                             "bundled": false,
                             "items": [
                                 {{
@@ -1433,10 +1381,7 @@ mod tests {
         let json: Value = serde_json::from_slice(&body).unwrap();
         let bundle_id = json.get("id").and_then(Value::as_i64).unwrap();
 
-        assert_eq!(
-            json.get("user"),
-            Some(&Value::String("usr_alex".to_owned()))
-        );
+        assert_eq!(json.get("user"), Some(&Value::String(user_id.to_string())));
         assert_eq!(json.get("bundled"), Some(&Value::Bool(false)));
         assert_eq!(
             json.pointer("/items/0/item"),
@@ -1474,7 +1419,7 @@ mod tests {
         let selected_items = bundle_selection_items(&pool, bundle_id).await.unwrap();
 
         assert_eq!(selected_items.len(), 1);
-        assert_eq!(selected_items[0].user, "usr_alex");
+        assert_eq!(selected_items[0].user, user_id.to_string());
         assert_eq!(selected_items[0].item_id, tomatoes_id);
         assert_eq!(selected_items[0].item, "Canned tomatoes");
         assert_eq!(selected_items[0].quantity, 2.0);
@@ -1509,10 +1454,12 @@ mod tests {
     #[tokio::test]
     async fn bundle_endpoint_fulfillment_removes_items_from_inventory() {
         let pool = test_pool().await;
-        sqlx::query("INSERT INTO users (id, name, role) VALUES ('usr_blair', 'Blair', 'member')")
-            .execute(&pool)
-            .await
-            .unwrap();
+        let user_id: i64 = sqlx::query_scalar(
+            "INSERT INTO users (name, role) VALUES ('Blair', 'member') RETURNING id",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
 
         let paper_towels_id: i64 =
             sqlx::query_scalar("SELECT id FROM inventory WHERE item = 'Paper towels'")
@@ -1531,7 +1478,7 @@ mod tests {
                     .body(Body::from(format!(
                         r#"
                         {{
-                            "user": "usr_blair",
+                            "user": "{user_id}",
                             "items": [
                                 {{
                                     "item_id": {paper_towels_id},
@@ -1563,7 +1510,7 @@ mod tests {
                         r#"
                         {{
                             "id": {bundle_id},
-                            "user": "usr_blair",
+                            "user": "{user_id}",
                             "bundled": true,
                             "fulfilled_at": "2026-05-28T12:00:00Z",
                             "items": [
@@ -1610,10 +1557,12 @@ mod tests {
     #[tokio::test]
     async fn inventory_endpoint_subtracts_pending_bundle_quantities() {
         let pool = test_pool().await;
-        sqlx::query("INSERT INTO users (id, name, role) VALUES ('usr_casey', 'Casey', 'member')")
-            .execute(&pool)
-            .await
-            .unwrap();
+        let user_id: i64 = sqlx::query_scalar(
+            "INSERT INTO users (name, role) VALUES ('Casey', 'member') RETURNING id",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
 
         let tomatoes_id: i64 =
             sqlx::query_scalar("SELECT id FROM inventory WHERE item = 'Canned tomatoes'")
@@ -1632,7 +1581,7 @@ mod tests {
                     .body(Body::from(format!(
                         r#"
                         {{
-                            "user": "usr_casey",
+                            "user": "{user_id}",
                             "items": [
                                 {{
                                     "item_id": {tomatoes_id},
@@ -1673,13 +1622,16 @@ mod tests {
     #[tokio::test]
     async fn bundle_endpoint_rejects_requests_over_available_quantity() {
         let pool = test_pool().await;
-        sqlx::query(
-            r#"
-            INSERT INTO users (id, name, role)
-            VALUES ('usr_drew', 'Drew', 'member'), ('usr_ellis', 'Ellis', 'member')
-            "#,
+        let drew_id: i64 = sqlx::query_scalar(
+            "INSERT INTO users (name, role) VALUES ('Drew', 'member') RETURNING id",
         )
-        .execute(&pool)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let ellis_id: i64 = sqlx::query_scalar(
+            "INSERT INTO users (name, role) VALUES ('Ellis', 'member') RETURNING id",
+        )
+        .fetch_one(&pool)
         .await
         .unwrap();
 
@@ -1700,7 +1652,7 @@ mod tests {
                     .body(Body::from(format!(
                         r#"
                         {{
-                            "user": "usr_drew",
+                            "user": "{drew_id}",
                             "items": [
                                 {{
                                     "item_id": {paper_towels_id},
@@ -1731,7 +1683,7 @@ mod tests {
                     .body(Body::from(format!(
                         r#"
                         {{
-                            "user": "usr_ellis",
+                            "user": "{ellis_id}",
                             "items": [
                                 {{
                                     "item_id": {paper_towels_id},
@@ -1759,7 +1711,7 @@ mod tests {
                         r#"
                         {{
                             "id": {bundle_id},
-                            "user": "usr_drew",
+                            "user": "{drew_id}",
                             "bundled": false,
                             "fulfilled_at": null,
                             "items": [
@@ -1788,7 +1740,7 @@ mod tests {
                         r#"
                         {{
                             "id": {bundle_id},
-                            "user": "usr_drew",
+                            "user": "{drew_id}",
                             "bundled": false,
                             "fulfilled_at": null,
                             "items": [

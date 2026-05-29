@@ -59,6 +59,7 @@ test('root sends guests to login and login/logout updates the session navigation
 
 	await expect(page.getByRole('button', { name: 'Inventory', exact: true })).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Pending bundles' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Users' })).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Log out' })).toBeVisible();
 
 	await page.getByRole('button', { name: 'Log out' }).click();
@@ -70,6 +71,7 @@ test('root sends guests to login and login/logout updates the session navigation
 test('members see available inventory and can request a pending bundle', async ({ page }) => {
 	await loginAs(page, 'Test Member');
 
+	await expect(page.getByRole('button', { name: 'Users' })).not.toBeVisible();
 	await expect(page.getByText('Canned tomatoes')).toBeVisible();
 	await expect(page.getByText('24 count')).toBeVisible();
 	await expect(page.getByRole('button', { name: 'request' })).toBeDisabled();
@@ -88,6 +90,25 @@ test('members see available inventory and can request a pending bundle', async (
 	await expect(page.getByRole('button', { name: 'Mark bundle 1 complete' })).not.toBeVisible();
 });
 
+test('admins can add and remove users', async ({ page }) => {
+	await setCurrentUser(page, '2');
+	await page.goto('/users');
+
+	await expect(page.getByRole('heading', { name: 'Users' })).toBeVisible();
+	await expect(page.getByText('Test Member')).toBeVisible();
+
+	await page.getByRole('textbox', { name: 'Name' }).fill('Kitchen Lead');
+	await page.getByLabel('Role').selectOption('admin');
+	await page.getByRole('button', { name: 'add' }).click();
+
+	await expect(page.getByText('Kitchen Lead')).toBeVisible();
+	await expect(page.getByText('4')).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Remove Kitchen Lead' })).toBeVisible();
+
+	await page.getByRole('button', { name: 'Remove Kitchen Lead' }).click();
+	await expect(page.getByText('Kitchen Lead')).not.toBeVisible();
+});
+
 test('member request validation prevents quantities above available inventory', async ({
 	page
 }) => {
@@ -103,7 +124,7 @@ test('member request validation prevents quantities above available inventory', 
 });
 
 test('admins can create, update, cancel, and delete inventory rows', async ({ page }) => {
-	await setCurrentUser(page, 'usr_admin');
+	await setCurrentUser(page, '2');
 	await page.goto('/inventory');
 
 	await expect(page.getByRole('heading', { name: 'Inventory' })).toBeVisible();
