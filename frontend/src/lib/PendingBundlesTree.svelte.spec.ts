@@ -52,6 +52,8 @@ describe('PendingBundlesTree.svelte', () => {
 		await expect.element(page.getByText('Bundle 1')).toBeInTheDocument();
 		await expect.element(page.getByText('Bundle 2')).toBeInTheDocument();
 
+		await page.getByRole('button', { name: 'Expand bundle 1' }).click();
+		await page.getByRole('spinbutton', { name: 'Quantity for Rice' }).fill('5');
 		await page.getByRole('button', { name: 'Mark bundle 1 complete' }).click();
 
 		await expect.element(page.getByText('completion pending update')).toBeInTheDocument();
@@ -67,6 +69,60 @@ describe('PendingBundlesTree.svelte', () => {
 			const body = JSON.parse(String(updateCall?.[1]?.body));
 			expect(body.id).toBe(1);
 			expect(body.fulfilled_at).toEqual(expect.any(String));
+			expect(body.items).toEqual([{ item_id: 10, quantity: 5 }]);
 		});
+	});
+
+	it('reverts admin quantity edits when a bundle is not completed', async () => {
+		sessionStorage.setItem('hearthledger.user.id', 'admin');
+
+		const fetchMock = vi.spyOn(window, 'fetch').mockImplementation(async (input, init) => {
+			const url = String(input);
+
+			if (url === '/api/users') {
+				return Response.json([{ id: 'admin', name: 'Admin', role: 'admin' }]);
+			}
+
+			if (url === '/api/bundles') {
+				return Response.json([
+					{
+						id: 1,
+						user: 'member-a',
+						items: [{ item_id: 10, item: 'Rice', quantity: 2 }],
+						created_at: '2026-05-28T12:00:00Z',
+						bundled: false,
+						fulfilled_at: null
+					}
+				]);
+			}
+
+			return new Response(null, { status: 404 });
+		});
+
+		render(PendingBundlesTree, { apiPath: '/api/bundle' });
+
+		await expect.element(page.getByText('Bundle 1')).toBeInTheDocument();
+		await page.getByRole('button', { name: 'Expand bundle 1' }).click();
+
+		const quantityInput = page.getByRole('spinbutton', { name: 'Quantity for Rice' });
+		await quantityInput.fill('5');
+		await expect.element(quantityInput).toHaveValue(5);
+
+		await page.getByRole('button', { name: 'update' }).click();
+
+		await vi.waitFor(() => {
+			expect(
+				fetchMock.mock.calls.filter(([input]) => String(input) === '/api/bundles')
+			).toHaveLength(2);
+		});
+		await page.getByRole('button', { name: 'Expand bundle 1' }).click();
+		await expect
+			.element(page.getByRole('spinbutton', { name: 'Quantity for Rice' }))
+			.toHaveValue(2);
+		expect(
+			fetchMock.mock.calls.some(
+				([input, init]) => String(input) === '/api/bundle' && init?.method === 'PUT'
+			)
+		).toBe(false);
 	});
 });

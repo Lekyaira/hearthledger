@@ -159,9 +159,33 @@
 		);
 	}
 
+	function hasBundleQuantityChange(bundle: BundleRow) {
+		return bundle.items.some((item) => Number(item.quantityValue) !== item.quantity);
+	}
+
+	function hasBundleItemDeletion(bundle: BundleRow) {
+		return bundle.items.some((item) => item.deleted);
+	}
+
+	function shouldCommitBundle(bundle: BundleRow) {
+		if (bundle.deleted || bundle.fulfilled_at) return true;
+		if (isAdmin && hasBundleQuantityChange(bundle)) return hasBundleItemDeletion(bundle);
+		return hasPendingChange(bundle);
+	}
+
 	function validateBundles() {
 		for (const bundle of bundles) {
-			if (bundle.deleted || bundle.bundled || bundle.fulfilled_at) continue;
+			if (bundle.deleted || bundle.bundled) continue;
+			if (isAdmin && !bundle.fulfilled_at && hasBundleQuantityChange(bundle)) {
+				if (!hasBundleItemDeletion(bundle)) continue;
+
+				const activeItems = bundle.items.filter((item) => !item.deleted);
+				if (activeItems.length === 0) {
+					return `Bundle ${bundle.id} needs at least one item or should be deleted.`;
+				}
+
+				continue;
+			}
 
 			const activeItems = bundle.items.filter((item) => !item.deleted);
 			if (activeItems.length === 0) {
@@ -193,6 +217,7 @@
 
 		try {
 			for (const bundle of bundles.filter(hasPendingChange)) {
+				if (!shouldCommitBundle(bundle)) continue;
 				if (bundle.bundled && !bundle.fulfilled_at) continue;
 
 				if (bundle.deleted) {
@@ -212,7 +237,7 @@
 						.filter((item) => !item.deleted)
 						.map((item) => ({
 							item_id: item.item_id,
-							quantity: Number(item.quantityValue)
+							quantity: isAdmin && !bundle.fulfilled_at ? item.quantity : Number(item.quantityValue)
 						}))
 				};
 				const response = await fetch(apiPath, {
@@ -245,6 +270,12 @@
 			deleted: false,
 			fulfilled_at: bundle.fulfilled_at ? null : new Date().toISOString()
 		});
+	}
+
+	function canEditQuantity(bundle: BundleRow, item: ItemRow) {
+		return isAdmin
+			? !bundle.deleted && !item.deleted
+			: !bundle.bundled && !bundle.deleted && !item.deleted;
 	}
 </script>
 
@@ -369,10 +400,7 @@
 												item.deleted}
 											class="w-full rounded border-zinc-300 text-sm text-zinc-900 tabular-nums disabled:bg-zinc-100"
 											value={item.quantityValue}
-											disabled={bundle.bundled ||
-												bundle.deleted ||
-												Boolean(bundle.fulfilled_at) ||
-												item.deleted}
+											disabled={!canEditQuantity(bundle, item)}
 											oninput={(event) =>
 												updateItem(bundle.id, item.item_id, {
 													quantityValue: event.currentTarget.value
