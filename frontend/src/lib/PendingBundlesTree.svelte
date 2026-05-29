@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { ArchiveRestore, ChevronRight, X } from '@lucide/svelte';
+	import { ArchiveRestore, ChevronRight, PackageCheck, X } from '@lucide/svelte';
+	import { readCurrentUser } from '$lib/auth';
 	import {
 		bundlesChangedEvent,
 		pendingBundlesStorageKey,
@@ -28,6 +29,7 @@
 	let expandedBundleIds = $state<Set<number>>(new Set());
 	let loadState = $state<'loading' | 'idle' | 'saving' | 'error'>('loading');
 	let errorMessage = $state('');
+	let isAdmin = $state(false);
 	let hasMounted = false;
 
 	const listApiPath = '/api/bundles';
@@ -77,6 +79,18 @@
 		}
 	}
 
+	function mergeStoredRows(loadedRows: BundleRow[]) {
+		const storedRows = readStoredRows();
+		if (!storedRows) return loadedRows;
+
+		const loadedIds = new Set(loadedRows.map((bundle) => bundle.id));
+		const storedRowsById = new Map(
+			storedRows.filter((bundle) => loadedIds.has(bundle.id)).map((bundle) => [bundle.id, bundle])
+		);
+
+		return loadedRows.map((bundle) => storedRowsById.get(bundle.id) ?? bundle);
+	}
+
 	async function loadBundles() {
 		loadState = 'loading';
 		errorMessage = '';
@@ -87,12 +101,13 @@
 				throw new Error(`Pending bundles failed to load with status ${response.status}.`);
 			}
 
+			const currentUser = await readCurrentUser();
+			isAdmin = currentUser?.role === 'admin';
 			const userId = readCurrentUserId();
 			const loadedBundles = ((await response.json()) as Bundle[]).filter(
-				(bundle) => bundle.user === userId
+				(bundle) => isAdmin || bundle.user === userId
 			);
-			const storedRows = readStoredRows();
-			bundles = storedRows ?? createRows(loadedBundles);
+			bundles = mergeStoredRows(createRows(loadedBundles));
 			expandedBundleIds = new Set();
 			loadState = 'idle';
 		} catch (error) {
@@ -139,17 +154,14 @@
 	function hasPendingChange(bundle: BundleRow) {
 		return (
 			bundle.deleted ||
-			bundle.items.some(
-				(item) =>
-					item.deleted ||
-					Number(item.quantityValue) !== item.quantity
-			)
+			Boolean(bundle.fulfilled_at) ||
+			bundle.items.some((item) => item.deleted || Number(item.quantityValue) !== item.quantity)
 		);
 	}
 
 	function validateBundles() {
 		for (const bundle of bundles) {
-			if (bundle.deleted || bundle.bundled) continue;
+			if (bundle.deleted || bundle.bundled || bundle.fulfilled_at) continue;
 
 			const activeItems = bundle.items.filter((item) => !item.deleted);
 			if (activeItems.length === 0) {
@@ -181,7 +193,7 @@
 
 		try {
 			for (const bundle of bundles.filter(hasPendingChange)) {
-				if (bundle.bundled) continue;
+				if (bundle.bundled && !bundle.fulfilled_at) continue;
 
 				if (bundle.deleted) {
 					const response = await fetch(`${apiPath}?id=${bundle.id}`, { method: 'DELETE' });
@@ -226,6 +238,13 @@
 	function cancelChanges() {
 		sessionStorage.removeItem(pendingBundlesStorageKey);
 		void loadBundles();
+	}
+
+	function toggleCompleted(bundle: BundleRow) {
+		updateBundle(bundle.id, {
+			deleted: false,
+			fulfilled_at: bundle.fulfilled_at ? null : new Date().toISOString()
+		});
 	}
 </script>
 
@@ -282,21 +301,44 @@
 							/>
 						</button>
 						<div class="min-w-0 flex-1">
-							<p class:line-through={bundle.deleted} class="font-medium text-zinc-950">
+							<p
+								class:line-through={bundle.deleted || bundle.fulfilled_at}
+								class="font-medium text-zinc-950"
+							>
 								Bundle {bundle.id}
 							</p>
 							<p class="text-sm text-zinc-600">{formatCreatedAt(bundle.created_at)}</p>
+							{#if bundle.fulfilled_at}
+								<p class="text-sm font-medium text-green-700">completion pending update</p>
+							{/if}
 						</div>
 						{#if bundle.bundled}
 							<span class="flex items-center gap-2 text-sm font-medium text-green-700">
 								<ArchiveRestore size={18} aria-hidden="true" />
 								ready for pickup
 							</span>
-						{:else}
+						{/if}
+						{#if isAdmin}
 							<button
 								type="button"
-								class="flex size-9 items-center justify-center rounded border border-red-300 text-red-700"
-								aria-label={bundle.deleted ? `Keep bundle ${bundle.id}` : `Delete bundle ${bundle.id}`}
+								class="flex size-9 items-center justify-center rounded border border-green-300 text-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+								aria-label={bundle.fulfilled_at
+									? `Keep bundle ${bundle.id} pending`
+									: `Mark bundle ${bundle.id} complete`}
+								disabled={bundle.deleted}
+								onclick={() => toggleCompleted(bundle)}
+							>
+								<PackageCheck size={18} aria-hidden="true" />
+							</button>
+						{/if}
+						{#if !bundle.bundled}
+							<button
+								type="button"
+								class="flex size-9 items-center justify-center rounded border border-red-300 text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+								aria-label={bundle.deleted
+									? `Keep bundle ${bundle.id}`
+									: `Delete bundle ${bundle.id}`}
+								disabled={Boolean(bundle.fulfilled_at)}
 								onclick={() => updateBundle(bundle.id, { deleted: !bundle.deleted })}
 							>
 								<X size={18} aria-hidden="true" />
@@ -309,7 +351,9 @@
 							{#each bundle.items as item (item.item_id)}
 								<li class="grid gap-3 py-2 sm:grid-cols-[1fr_7rem_auto] sm:items-center">
 									<span
-										class:line-through={bundle.deleted || item.deleted}
+										class:line-through={bundle.deleted ||
+											Boolean(bundle.fulfilled_at) ||
+											item.deleted}
 										class="min-w-0 truncate text-sm font-medium text-zinc-900"
 									>
 										{item.item}
@@ -320,10 +364,15 @@
 											type="number"
 											min="0"
 											step="any"
-											class:line-through={bundle.deleted || item.deleted}
+											class:line-through={bundle.deleted ||
+												Boolean(bundle.fulfilled_at) ||
+												item.deleted}
 											class="w-full rounded border-zinc-300 text-sm text-zinc-900 tabular-nums disabled:bg-zinc-100"
 											value={item.quantityValue}
-											disabled={bundle.bundled || bundle.deleted || item.deleted}
+											disabled={bundle.bundled ||
+												bundle.deleted ||
+												Boolean(bundle.fulfilled_at) ||
+												item.deleted}
 											oninput={(event) =>
 												updateItem(bundle.id, item.item_id, {
 													quantityValue: event.currentTarget.value
@@ -334,7 +383,7 @@
 										<button
 											type="button"
 											class="flex size-9 items-center justify-center rounded border border-red-300 text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
-											disabled={bundle.deleted}
+											disabled={bundle.deleted || Boolean(bundle.fulfilled_at)}
 											aria-label={item.deleted
 												? `Keep ${item.item} in bundle ${bundle.id}`
 												: `Delete ${item.item} from bundle ${bundle.id}`}

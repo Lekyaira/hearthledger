@@ -1,3 +1,5 @@
+import type { User } from '$lib/users';
+
 export const userStorageKey = 'hearthledger.user.id';
 export const userChangedEvent = 'hearthledger:user-changed';
 
@@ -20,4 +22,15 @@ export function clearCurrentUserId() {
 	sessionStorage.removeItem('user_id');
 	sessionStorage.removeItem('userId');
 	window.dispatchEvent(new CustomEvent(userChangedEvent));
+}
+
+export async function readCurrentUser(fetchImpl: typeof fetch = fetch) {
+	const userId = readCurrentUserId();
+	if (!userId) return null;
+
+	const response = await fetchImpl('/api/users');
+	if (!response.ok) return null;
+
+	const users = (await response.json()) as User[];
+	return users.find((user) => user.id === userId) ?? null;
 }

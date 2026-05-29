@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import { Handbag } from '@lucide/svelte';
-	import { userChangedEvent } from '$lib/auth';
+	import { readCurrentUser, userChangedEvent } from '$lib/auth';
 	import { bundlesChangedEvent, readCurrentUserId, type Bundle } from '$lib/bundles';
 
 	type Props = {
@@ -27,12 +27,15 @@
 	});
 
 	async function loadOpenBundleCount() {
+		const currentUser = await readCurrentUser();
 		const userId = readCurrentUserId();
 		const response = await fetch(apiPath);
 		if (!response.ok) return;
 
 		const bundles = (await response.json()) as Bundle[];
-		openBundleCount = bundles.filter((bundle) => bundle.user === userId).length;
+		openBundleCount = bundles.filter(
+			(bundle) => currentUser?.role === 'admin' || bundle.user === userId
+		).length;
 	}
 </script>
 
@@ -45,7 +48,7 @@
 	<Handbag size={22} aria-hidden="true" />
 	{#if openBundleCount > 0}
 		<span
-			class="absolute -right-2 -top-2 flex min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-xs font-semibold leading-5 text-white"
+			class="absolute -top-2 -right-2 flex min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-xs leading-5 font-semibold text-white"
 			aria-label={`${openBundleCount} open bundles`}
 		>
 			{openBundleCount}
