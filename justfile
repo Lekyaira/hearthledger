@@ -44,9 +44,13 @@ test-frontend:
 test-frontend-run:
     cd frontend && npm run test:unit
 
+# Run frontend Playwright end-to-end tests once.
+test-frontend-e2e:
+    cd frontend && npm run test:e2e
+
 # Run Rust tests for the backend 
 test-backend:
   cd backend && cargo test 
 
-# Run both Rust and SvelteKit tests.
-test: test-backend test-frontend-run
+# Run Rust, SvelteKit unit, and Playwright end-to-end tests.
+test: test-backend test-frontend-run test-frontend-e2e
