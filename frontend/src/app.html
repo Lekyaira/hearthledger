@@ -6,8 +6,12 @@
 		<meta name="text-scale" content="scale" />
 		<script>
 			try {
-				const hearthledgerTheme = localStorage.getItem('hearthledger-theme') || 'light';
-				document.documentElement.dataset.theme = hearthledgerTheme === 'dark' ? 'dark' : 'light';
+				const hearthledgerTheme = localStorage.getItem('hearthledger-theme');
+				const systemTheme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+				document.documentElement.dataset.theme =
+					hearthledgerTheme === 'dark' || hearthledgerTheme === 'light'
+						? hearthledgerTheme
+						: systemTheme;
 			} catch {
 				document.documentElement.dataset.theme = 'light';
 			}

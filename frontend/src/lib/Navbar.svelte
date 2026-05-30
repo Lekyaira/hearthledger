@@ -36,7 +36,8 @@
 		if (event && event.key !== themeStorageKey) return;
 
 		const storedTheme = localStorage.getItem(themeStorageKey);
-		const nextTheme = storedTheme === 'dark' ? 'dark' : 'light';
+		const systemTheme = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+		const nextTheme = storedTheme === 'dark' || storedTheme === 'light' ? storedTheme : systemTheme;
 		theme = nextTheme;
 		document.documentElement.dataset.theme = nextTheme;
 	}
