@@ -2,12 +2,11 @@ use crate::app_state::AppState;
 use crate::bundle::*;
 use crate::database_error_to_status;
 use axum::{
-    Json, Router,
+    Json,
     extract::{Query, State},
     http::StatusCode,
-    routing::get,
 };
-use sqlx::{SqlitePool, sqlite::SqlitePoolOptions};
+use sqlx::SqlitePool;
 use std::collections::HashMap;
 
 pub(super) async fn get_bundle(
@@ -142,25 +141,6 @@ pub(super) async fn delete_bundle(
     }
 
     Ok(StatusCode::NO_CONTENT)
-}
-
-pub async fn bundle_selection_items(
-    pool: &SqlitePool,
-    bundle_id: i64,
-) -> Result<Vec<BundleSelectionItem>, sqlx::Error> {
-    sqlx::query_as::<_, BundleSelectionItem>(
-        r#"
-        SELECT CAST(b.user AS TEXT) AS user, bi.item_id, i.item, bi.quantity
-        FROM bundles b
-        JOIN bundled_items bi ON bi.bundle_id = b.id
-        JOIN inventory i ON i.id = bi.item_id
-        WHERE b.id = ?
-        ORDER BY bi.id
-        "#,
-    )
-    .bind(bundle_id)
-    .fetch_all(pool)
-    .await
 }
 
 pub(super) async fn records_to_bundle_list_entries(

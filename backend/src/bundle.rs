@@ -61,11 +61,3 @@ pub(super) struct BundleRecord {
     pub(super) bundled: bool,
     pub(super) fulfilled_at: Option<String>,
 }
-
-#[derive(Debug, Serialize, sqlx::FromRow)]
-pub struct BundleSelectionItem {
-    pub user: String,
-    pub item_id: i64,
-    pub item: String,
-    pub quantity: f64,
-}

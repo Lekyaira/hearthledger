@@ -580,14 +580,18 @@ mod tests {
             Some(bundle_id)
         );
         assert!(bundles[0].get("fulfilled_at").is_none());
-
-        let selected_items = bundle_selection_items(&pool, bundle_id).await.unwrap();
-
-        assert_eq!(selected_items.len(), 1);
-        assert_eq!(selected_items[0].user, user_id.to_string());
-        assert_eq!(selected_items[0].item_id, tomatoes_id);
-        assert_eq!(selected_items[0].item, "Canned tomatoes");
-        assert_eq!(selected_items[0].quantity, 2.0);
+        assert_eq!(
+            bundles[0].pointer("/items/0/item_id").and_then(Value::as_i64),
+            Some(tomatoes_id)
+        );
+        assert_eq!(
+            bundles[0].pointer("/items/0/item"),
+            Some(&Value::String("Canned tomatoes".to_owned()))
+        );
+        assert_eq!(
+            bundles[0].pointer("/items/0/quantity").and_then(Value::as_f64),
+            Some(2.0)
+        );
 
         let response = app
             .clone()

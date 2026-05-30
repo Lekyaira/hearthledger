@@ -28,21 +28,28 @@ async function inventoryRow(page: Page, itemName: string): Promise<Locator> {
 
 	await expect
 		.poll(async () => {
-			const values = await rows.evaluateAll((rowElements) =>
-				rowElements.map(
-					(row) => row.querySelector<HTMLInputElement>('input[type="text"]')?.value ?? ''
-				)
-			);
+			const values = await inventoryItemNames(rows);
 			return values.includes(itemName);
 		})
 		.toBe(true);
 
-	const values = await rows.evaluateAll((rowElements) =>
-		rowElements.map((row) => row.querySelector<HTMLInputElement>('input[type="text"]')?.value ?? '')
-	);
+	const values = await inventoryItemNames(rows);
 	const index = values.indexOf(itemName);
 
 	return rows.nth(index);
+}
+
+async function inventoryItemNames(rows: Locator) {
+	return rows.evaluateAll((rowElements) =>
+		rowElements.map((row) => row.querySelector<HTMLInputElement>('input[type="text"]')?.value ?? '')
+	);
+}
+
+async function replaceInputValue(input: Locator, value: string) {
+	await input.click();
+	await input.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A');
+	await input.pressSequentially(value);
+	await expect(input).toHaveValue(value);
 }
 
 test.beforeEach(async ({ page }) => {
@@ -139,12 +146,14 @@ test('admins can create, update, cancel, and delete inventory rows', async ({ pa
 	const savedBrownRiceRow = await inventoryRow(page, 'Brown rice');
 	await expect(savedBrownRiceRow.getByRole('spinbutton', { name: 'Quantity' })).toHaveValue('7.5');
 
-	await savedBrownRiceRow.getByRole('spinbutton', { name: 'Quantity' }).fill('8');
+	await replaceInputValue(savedBrownRiceRow.getByRole('spinbutton', { name: 'Quantity' }), '8');
+	await expect(savedBrownRiceRow.getByLabel('Pending edit')).toBeVisible();
 	await page.getByRole('button', { name: 'cancel changes' }).click();
 	const resetBrownRiceRow = await inventoryRow(page, 'Brown rice');
 	await expect(resetBrownRiceRow.getByRole('spinbutton', { name: 'Quantity' })).toHaveValue('7.5');
 
-	await resetBrownRiceRow.getByRole('spinbutton', { name: 'Quantity' }).fill('8');
+	await replaceInputValue(resetBrownRiceRow.getByRole('spinbutton', { name: 'Quantity' }), '8');
+	await expect(resetBrownRiceRow.getByLabel('Pending edit')).toBeVisible();
 	await page.getByRole('button', { name: 'update' }).click();
 	const updatedBrownRiceRow = await inventoryRow(page, 'Brown rice');
 	await expect(updatedBrownRiceRow.getByRole('spinbutton', { name: 'Quantity' })).toHaveValue('8');
@@ -152,7 +161,13 @@ test('admins can create, update, cancel, and delete inventory rows', async ({ pa
 	await page.getByRole('button', { name: 'Delete Brown rice' }).click();
 	await page.getByRole('button', { name: 'update' }).click();
 
-	await expect(page.locator('input[value="Brown rice"]')).not.toBeVisible();
+	const rows = page.getByRole('list', { name: 'Inventory items' }).getByRole('listitem');
+	await expect
+		.poll(async () => {
+			const values = await inventoryItemNames(rows);
+			return values.includes('Brown rice');
+		})
+		.toBe(false);
 });
 
 test('admins can fulfill pending bundles and committed quantities remain reflected in inventory', async ({
