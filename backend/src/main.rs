@@ -1,7 +1,7 @@
 use std::env;
 
 use anyhow::Context;
-use backend::{app, migrate};
+use backend::{db::migrate, routes::app};
 use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
