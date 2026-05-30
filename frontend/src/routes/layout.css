@@ -1,3 +1,96 @@
 @import 'tailwindcss';
 @plugin '@tailwindcss/forms';
 @plugin '@tailwindcss/typography';
+
+:root,
+html[data-theme='light'] {
+	--hl-light: #fefeff;
+	--hl-dark: #232325;
+	--hl-bg: var(--hl-light);
+	--hl-fg: var(--hl-dark);
+	--hl-border: color-mix(in srgb, var(--hl-dark) 18%, var(--hl-light));
+	--hl-muted: color-mix(in srgb, var(--hl-dark) 70%, var(--hl-light));
+	--hl-subtle: color-mix(in srgb, var(--hl-dark) 55%, var(--hl-light));
+	--hl-button-bg: var(--hl-dark);
+	--hl-button-fg: var(--hl-light);
+}
+
+html[data-theme='dark'] {
+	--hl-bg: var(--hl-dark);
+	--hl-fg: var(--hl-light);
+	--hl-border: color-mix(in srgb, var(--hl-light) 22%, var(--hl-dark));
+	--hl-muted: color-mix(in srgb, var(--hl-light) 72%, var(--hl-dark));
+	--hl-subtle: color-mix(in srgb, var(--hl-light) 56%, var(--hl-dark));
+	--hl-button-bg: var(--hl-light);
+	--hl-button-fg: var(--hl-dark);
+	color-scheme: dark;
+}
+
+html,
+body {
+	min-height: 100%;
+	background: var(--hl-bg);
+	color: var(--hl-fg);
+}
+
+body {
+	margin: 0;
+}
+
+button,
+input,
+select,
+textarea {
+	background-color: var(--hl-bg);
+	color: var(--hl-fg);
+}
+
+button:hover {
+	background-color: color-mix(in srgb, var(--hl-fg) 6%, var(--hl-bg));
+}
+
+.bg-white {
+	background-color: var(--hl-bg) !important;
+}
+
+.bg-white\/95 {
+	background-color: color-mix(in srgb, var(--hl-bg) 95%, transparent) !important;
+}
+
+.bg-zinc-950 {
+	background-color: var(--hl-button-bg) !important;
+}
+
+.text-white {
+	color: var(--hl-button-fg) !important;
+}
+
+.text-zinc-950,
+.text-zinc-900,
+.text-zinc-800 {
+	color: var(--hl-fg) !important;
+}
+
+.text-zinc-700,
+.text-zinc-600 {
+	color: var(--hl-muted) !important;
+}
+
+.text-zinc-500 {
+	color: var(--hl-subtle) !important;
+}
+
+.border-zinc-300,
+.border-zinc-200,
+.divide-zinc-200 > :not(:last-child),
+.divide-zinc-100 > :not(:last-child) {
+	border-color: var(--hl-border) !important;
+}
+
+.shadow-sm {
+	box-shadow: 0 1px 2px 0 color-mix(in srgb, var(--hl-fg) 10%, transparent) !important;
+}
+
+.disabled\:bg-zinc-100:disabled {
+	background-color: color-mix(in srgb, var(--hl-fg) 8%, var(--hl-bg)) !important;
+}
