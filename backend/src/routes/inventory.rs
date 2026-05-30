@@ -145,3 +145,173 @@ pub(super) async fn delete_inventory(
 
     Ok(StatusCode::NO_CONTENT)
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::db::tests::test_pool;
+    use crate::routes::app;
+    use crate::routes::test_support::{empty_request, json_body, json_request};
+    use axum::http::{Method, StatusCode};
+    use serde_json::Value;
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn inventory_endpoint_returns_seeded_items() {
+        let response = app(test_pool().await)
+            .oneshot(empty_request("/v1/inventory"))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let json = json_body(response).await;
+
+        assert!(json.as_array().unwrap().iter().any(|row| {
+            row.get("item") == Some(&Value::String("Canned tomatoes".to_owned()))
+                && row.get("quantity").and_then(Value::as_f64) == Some(24.0)
+                && row.get("quantity_type") == Some(&Value::String("count".to_owned()))
+        }));
+    }
+
+    #[tokio::test]
+    async fn inventory_endpoint_creates_items() {
+        let response = app(test_pool().await)
+            .oneshot(json_request(
+                Method::POST,
+                "/v1/inventory",
+                r#"
+                [
+                    {
+                        "item": "Jasmine rice",
+                        "quantity": 5.5,
+                        "quantity_type": "pounds"
+                    },
+                    {
+                        "item": "Olive oil",
+                        "quantity": 2,
+                        "quantity_type": "liters"
+                    }
+                ]
+                "#,
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        let json = json_body(response).await;
+        let items = json.as_array().unwrap();
+
+        assert_eq!(items.len(), 2);
+        assert!(items.iter().any(|row| {
+            row.get("item") == Some(&Value::String("Jasmine rice".to_owned()))
+                && row.get("quantity").and_then(Value::as_f64) == Some(5.5)
+                && row.get("quantity_type") == Some(&Value::String("pounds".to_owned()))
+        }));
+        assert!(items.iter().any(|row| {
+            row.get("item") == Some(&Value::String("Olive oil".to_owned()))
+                && row.get("quantity").and_then(Value::as_f64) == Some(2.0)
+                && row.get("quantity_type") == Some(&Value::String("liters".to_owned()))
+        }));
+    }
+
+    #[tokio::test]
+    async fn inventory_endpoint_rejects_duplicate_items() {
+        let response = app(test_pool().await)
+            .oneshot(json_request(
+                Method::POST,
+                "/v1/inventory",
+                r#"
+                [
+                    {
+                        "item": "Canned tomatoes",
+                        "quantity": 4,
+                        "quantity_type": "count"
+                    }
+                ]
+                "#,
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+    }
+
+    #[tokio::test]
+    async fn inventory_endpoint_updates_items() {
+        let response = app(test_pool().await)
+            .oneshot(json_request(
+                Method::PUT,
+                "/v1/inventory",
+                r#"
+                [
+                    {
+                        "item": "Canned tomatoes",
+                        "quantity": 18,
+                        "quantity_type": "count"
+                    },
+                    {
+                        "item": "All-purpose flour",
+                        "quantity": 8.25,
+                        "quantity_type": "pounds"
+                    }
+                ]
+                "#,
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let json = json_body(response).await;
+        let items = json.as_array().unwrap();
+
+        assert_eq!(items.len(), 2);
+        assert!(items.iter().any(|row| {
+            row.get("item") == Some(&Value::String("Canned tomatoes".to_owned()))
+                && row.get("quantity").and_then(Value::as_f64) == Some(18.0)
+                && row.get("quantity_type") == Some(&Value::String("count".to_owned()))
+        }));
+        assert!(items.iter().any(|row| {
+            row.get("item") == Some(&Value::String("All-purpose flour".to_owned()))
+                && row.get("quantity").and_then(Value::as_f64) == Some(8.25)
+                && row.get("quantity_type") == Some(&Value::String("pounds".to_owned()))
+        }));
+    }
+
+    #[tokio::test]
+    async fn inventory_endpoint_rejects_update_for_missing_item() {
+        let response = app(test_pool().await)
+            .oneshot(json_request(
+                Method::PUT,
+                "/v1/inventory",
+                r#"
+                [
+                    {
+                        "item": "Wildflower honey",
+                        "quantity": 3,
+                        "quantity_type": "count"
+                    }
+                ]
+                "#,
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn inventory_endpoint_deletes_items() {
+        let response = app(test_pool().await)
+            .oneshot(json_request(
+                Method::DELETE,
+                "/v1/inventory",
+                r#"["Paper towels"]"#,
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    }
+}

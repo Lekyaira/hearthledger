@@ -138,3 +138,217 @@ pub(super) async fn delete_users(
 
     Ok(StatusCode::NO_CONTENT)
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::db::tests::test_pool;
+    use crate::routes::app;
+    use crate::routes::test_support::{empty_request, json_body, json_request};
+    use axum::http::{Method, StatusCode};
+    use serde_json::Value;
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn users_endpoint_returns_seeded_test_users() {
+        let response = app(test_pool().await)
+            .oneshot(empty_request("/v1/users"))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let json = json_body(response).await;
+        let users = json.as_array().unwrap();
+
+        assert_eq!(users.len(), 2);
+        assert!(users.iter().any(|row| {
+            row.get("id") == Some(&Value::String("1".to_owned()))
+                && row.get("name") == Some(&Value::String("Test Member".to_owned()))
+                && row.get("role") == Some(&Value::String("member".to_owned()))
+        }));
+        assert!(users.iter().any(|row| {
+            row.get("id") == Some(&Value::String("2".to_owned()))
+                && row.get("name") == Some(&Value::String("Test Admin".to_owned()))
+                && row.get("role") == Some(&Value::String("admin".to_owned()))
+        }));
+    }
+
+    #[tokio::test]
+    async fn users_endpoint_creates_users() {
+        let response = app(test_pool().await)
+            .oneshot(json_request(
+                Method::POST,
+                "/v1/users",
+                r#"
+                [
+                    {
+                        "name": "Alex",
+                        "role": "member"
+                    },
+                    {
+                        "name": "Blair",
+                        "role": "admin"
+                    }
+                ]
+                "#,
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        let json = json_body(response).await;
+        let users = json.as_array().unwrap();
+
+        assert_eq!(users.len(), 2);
+        assert!(users.iter().any(|row| {
+            row.get("id") == Some(&Value::String("3".to_owned()))
+                && row.get("name") == Some(&Value::String("Alex".to_owned()))
+                && row.get("role") == Some(&Value::String("member".to_owned()))
+        }));
+        assert!(users.iter().any(|row| {
+            row.get("id") == Some(&Value::String("4".to_owned()))
+                && row.get("name") == Some(&Value::String("Blair".to_owned()))
+                && row.get("role") == Some(&Value::String("admin".to_owned()))
+        }));
+    }
+
+    #[tokio::test]
+    async fn users_endpoint_updates_users() {
+        let app = app(test_pool().await);
+
+        let response = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                "/v1/users",
+                r#"
+                [
+                    {
+                        "name": "Alex",
+                        "role": "member"
+                    },
+                    {
+                        "name": "Blair",
+                        "role": "member"
+                    }
+                ]
+                "#,
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        let response = app
+            .oneshot(json_request(
+                Method::PUT,
+                "/v1/users",
+                r#"
+                [
+                    {
+                        "id": "3",
+                        "name": "Alex Morgan",
+                        "role": "admin"
+                    },
+                    {
+                        "id": "4",
+                        "name": "Blair Chen",
+                        "role": "member"
+                    }
+                ]
+                "#,
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let json = json_body(response).await;
+        let users = json.as_array().unwrap();
+
+        assert_eq!(users.len(), 2);
+        assert!(users.iter().any(|row| {
+            row.get("id") == Some(&Value::String("3".to_owned()))
+                && row.get("name") == Some(&Value::String("Alex Morgan".to_owned()))
+                && row.get("role") == Some(&Value::String("admin".to_owned()))
+        }));
+        assert!(users.iter().any(|row| {
+            row.get("id") == Some(&Value::String("4".to_owned()))
+                && row.get("name") == Some(&Value::String("Blair Chen".to_owned()))
+                && row.get("role") == Some(&Value::String("member".to_owned()))
+        }));
+    }
+
+    #[tokio::test]
+    async fn users_endpoint_rejects_update_for_missing_user() {
+        let response = app(test_pool().await)
+            .oneshot(json_request(
+                Method::PUT,
+                "/v1/users",
+                r#"
+                [
+                    {
+                        "id": "99",
+                        "name": "Missing User",
+                        "role": "member"
+                    }
+                ]
+                "#,
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn users_endpoint_deletes_users() {
+        let app = app(test_pool().await);
+
+        let response = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                "/v1/users",
+                r#"
+                [
+                    {
+                        "name": "Alex",
+                        "role": "member"
+                    }
+                ]
+                "#,
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        let response = app
+            .clone()
+            .oneshot(json_request(
+                Method::DELETE,
+                "/v1/users",
+                r#"
+                [
+                    {
+                        "id": "3",
+                        "name": "Alex",
+                        "role": "member"
+                    }
+                ]
+                "#,
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+
+        let response = app.oneshot(empty_request("/v1/users")).await.unwrap();
+
+        let json = json_body(response).await;
+
+        assert_eq!(json.as_array().unwrap().len(), 2);
+    }
+}

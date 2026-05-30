@@ -328,3 +328,140 @@ async fn remove_bundle_items_from_inventory(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::db::tests::test_pool;
+    use crate::routes::app;
+    use crate::routes::test_support::{json_body, json_request};
+    use axum::http::{Method, StatusCode};
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn bundle_endpoint_rejects_requests_over_available_quantity() {
+        let pool = test_pool().await;
+        let drew_id: i64 = sqlx::query_scalar(
+            "INSERT INTO users (name, role) VALUES ('Drew', 'member') RETURNING id",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        let ellis_id: i64 = sqlx::query_scalar(
+            "INSERT INTO users (name, role) VALUES ('Ellis', 'member') RETURNING id",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+
+        let paper_towels_id: i64 =
+            sqlx::query_scalar("SELECT id FROM inventory WHERE item = 'Paper towels'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+
+        let app = app(pool);
+        let response = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                "/v1/bundle",
+                format!(
+                    r#"
+                    {{
+                        "user": "{drew_id}",
+                        "items": [
+                            {{
+                                "item_id": {paper_towels_id},
+                                "quantity": 8
+                            }}
+                        ]
+                    }}
+                    "#
+                ),
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CREATED);
+
+        let json = json_body(response).await;
+        let bundle_id = json.get("id").and_then(serde_json::Value::as_i64).unwrap();
+
+        let response = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                "/v1/bundle",
+                format!(
+                    r#"
+                    {{
+                        "user": "{ellis_id}",
+                        "items": [
+                            {{
+                                "item_id": {paper_towels_id},
+                                "quantity": 3
+                            }}
+                        ]
+                    }}
+                    "#
+                ),
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+
+        let response = app
+            .clone()
+            .oneshot(json_request(
+                Method::PUT,
+                "/v1/bundle",
+                format!(
+                    r#"
+                    {{
+                        "id": {bundle_id},
+                        "user": "{drew_id}",
+                        "bundled": false,
+                        "fulfilled_at": null,
+                        "items": [
+                            {{
+                                "item_id": {paper_towels_id},
+                                "quantity": 9
+                            }}
+                        ]
+                    }}
+                    "#
+                ),
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let response = app
+            .oneshot(json_request(
+                Method::PUT,
+                "/v1/bundle",
+                format!(
+                    r#"
+                    {{
+                        "id": {bundle_id},
+                        "user": "{drew_id}",
+                        "bundled": false,
+                        "fulfilled_at": null,
+                        "items": [
+                            {{
+                                "item_id": {paper_towels_id},
+                                "quantity": 11
+                            }}
+                        ]
+                    }}
+                    "#
+                ),
+            ))
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+    }
+}
