@@ -99,28 +99,54 @@ test('admin users see all pending bundles and members see only their own', async
 	await expect(memberPage.getByText('Bundle 1')).toBeVisible();
 	await expect(memberPage.getByText('Bundle 2')).not.toBeVisible();
 	await expect(memberPage.getByLabel('1 open bundles')).toBeVisible();
+
+	const readyMemberPage = await page.context().newPage();
+	await openBundlesPage(readyMemberPage, 'member-b');
+
+	await expect(readyMemberPage.getByLabel('1 bundles ready for pickup')).toBeVisible();
 });
 
-test('admin completion commits edited quantities', async ({ page }) => {
+test('admin ready status commits edited quantities without fulfilling the bundle', async ({
+	page
+}) => {
 	const { updates } = await openBundlesPage(page, 'admin');
 
 	await page.getByRole('button', { name: 'Expand bundle 1' }).click();
 	await page.getByRole('spinbutton', { name: 'Quantity for Rice' }).fill('5');
-	await page.getByRole('button', { name: 'Mark bundle 1 complete' }).click();
-	await expect(page.getByText('completion pending update')).toBeVisible();
+	await page.getByRole('button', { name: 'Mark bundle 1 ready for pickup' }).click();
+	await expect(page.getByText('ready status pending update')).toBeVisible();
 
 	await page.getByRole('button', { name: 'update' }).click();
 
 	await expect.poll(() => updates.length).toBe(1);
 	expect(updates[0]).toMatchObject({
 		id: 1,
-		fulfilled_at: expect.any(String),
+		bundled: true,
+		fulfilled_at: null,
 		items: [
 			{ item_id: 10, quantity: 5 },
 			{ item_id: 20, quantity: 3 }
 		]
 	});
-	await expect(page.getByText('Bundle 1')).not.toBeVisible();
+	await expect(page.getByText('Bundle 1')).toBeVisible();
+});
+
+test('members confirm pickup of read-only ready bundles', async ({ page }) => {
+	const { updates } = await openBundlesPage(page, 'member-b');
+
+	await page.getByRole('button', { name: 'Expand bundle 2' }).click();
+	await expect(page.getByRole('spinbutton', { name: 'Quantity for Flour' })).toBeDisabled();
+	await page.getByRole('button', { name: 'Mark bundle 2 picked up' }).click();
+	await expect(page.getByText('pickup pending update')).toBeVisible();
+	await page.getByRole('button', { name: 'update' }).click();
+
+	await expect.poll(() => updates.length).toBe(1);
+	expect(updates[0]).toMatchObject({
+		id: 2,
+		bundled: true,
+		fulfilled_at: expect.any(String)
+	});
+	await expect(page.getByText('Bundle 2')).not.toBeVisible();
 });
 
 test('admin quantity-only changes cannot be saved without completion', async ({ page }) => {

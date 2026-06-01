@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { ArchiveRestore, ChevronRight, PackageCheck, X } from '@lucide/svelte';
+	import { ChevronRight, PackageCheck, PackagePlus, X } from '@lucide/svelte';
 	import { readCurrentUser } from '$lib/auth';
 	import {
 		bundlesChangedEvent,
@@ -16,6 +16,7 @@
 
 	type BundleRow = Omit<Bundle, 'items'> & {
 		deleted: boolean;
+		originalBundled: boolean;
 		items: ItemRow[];
 	};
 
@@ -60,6 +61,7 @@
 		return sourceBundles.map((bundle) => ({
 			...bundle,
 			deleted: false,
+			originalBundled: bundle.bundled,
 			items: bundle.items.map((item) => ({
 				...item,
 				deleted: false,
@@ -155,6 +157,7 @@
 	function hasPendingChange(bundle: BundleRow) {
 		return (
 			bundle.deleted ||
+			bundle.bundled !== bundle.originalBundled ||
 			Boolean(bundle.fulfilled_at) ||
 			bundle.items.some((item) => item.deleted || Number(item.quantityValue) !== item.quantity)
 		);
@@ -169,7 +172,8 @@
 	}
 
 	function shouldCommitBundle(bundle: BundleRow) {
-		if (bundle.deleted || bundle.fulfilled_at) return true;
+		if (bundle.deleted || bundle.bundled !== bundle.originalBundled || bundle.fulfilled_at)
+			return true;
 		if (hasBundleQuantityChange(bundle)) return hasBundleItemDeletion(bundle);
 		return hasPendingChange(bundle);
 	}
@@ -225,8 +229,6 @@
 		try {
 			for (const bundle of bundles.filter(hasPendingChange)) {
 				if (!shouldCommitBundle(bundle)) continue;
-				if (bundle.bundled && !bundle.fulfilled_at) continue;
-
 				if (bundle.deleted) {
 					const response = await fetch(`${apiPath}?id=${bundle.id}`, { method: 'DELETE' });
 					if (!response.ok) {
@@ -244,7 +246,8 @@
 						.filter((item) => !item.deleted)
 						.map((item) => ({
 							item_id: item.item_id,
-							quantity: bundle.fulfilled_at ? Number(item.quantityValue) : item.quantity
+							quantity:
+								bundle.bundled || bundle.fulfilled_at ? Number(item.quantityValue) : item.quantity
 						}))
 				};
 				const response = await fetch(apiPath, {
@@ -272,7 +275,14 @@
 		void loadBundles();
 	}
 
-	function toggleCompleted(bundle: BundleRow) {
+	function toggleReady(bundle: BundleRow) {
+		updateBundle(bundle.id, {
+			deleted: false,
+			bundled: !bundle.bundled
+		});
+	}
+
+	function togglePickedUp(bundle: BundleRow) {
 		updateBundle(bundle.id, {
 			deleted: false,
 			fulfilled_at: bundle.fulfilled_at ? null : new Date().toISOString()
@@ -280,9 +290,7 @@
 	}
 
 	function canEditQuantity(bundle: BundleRow, item: ItemRow) {
-		return isAdmin
-			? !bundle.deleted && !item.deleted
-			: !bundle.bundled && !bundle.deleted && !item.deleted;
+		return !bundle.bundled && !bundle.deleted && !item.deleted;
 	}
 </script>
 
@@ -347,26 +355,39 @@
 							</p>
 							<p class="text-sm text-zinc-600">{formatCreatedAt(bundle.created_at)}</p>
 							{#if bundle.fulfilled_at}
-								<p class="text-sm font-medium text-green-700">completion pending update</p>
+								<p class="text-sm font-medium text-green-700">pickup pending update</p>
+							{:else if bundle.bundled !== bundle.originalBundled}
+								<p class="text-sm font-medium text-green-700">ready status pending update</p>
 							{/if}
 						</div>
 						{#if bundle.bundled}
 							<span class="flex items-center gap-2 text-sm font-medium text-green-700">
-								<ArchiveRestore size={18} aria-hidden="true" />
 								ready for pickup
 							</span>
 						{/if}
-						{#if isAdmin}
+						{#if isAdmin && !bundle.originalBundled}
 							<button
 								type="button"
 								class="flex size-9 items-center justify-center rounded border border-green-300 text-green-700 disabled:cursor-not-allowed disabled:opacity-50"
-								aria-label={bundle.fulfilled_at
+								aria-label={bundle.bundled
 									? `Keep bundle ${bundle.id} pending`
-									: `Mark bundle ${bundle.id} complete`}
+									: `Mark bundle ${bundle.id} ready for pickup`}
 								disabled={bundle.deleted}
-								onclick={() => toggleCompleted(bundle)}
+								onclick={() => toggleReady(bundle)}
 							>
 								<PackageCheck size={18} aria-hidden="true" />
+							</button>
+						{/if}
+						{#if !isAdmin && bundle.bundled}
+							<button
+								type="button"
+								class="flex size-9 items-center justify-center rounded border border-green-300 text-green-700"
+								aria-label={bundle.fulfilled_at
+									? `Keep bundle ${bundle.id} ready for pickup`
+									: `Mark bundle ${bundle.id} picked up`}
+								onclick={() => togglePickedUp(bundle)}
+							>
+								<PackagePlus size={18} aria-hidden="true" />
 							</button>
 						{/if}
 						{#if !bundle.bundled}

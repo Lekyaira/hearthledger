@@ -94,7 +94,7 @@ test('members see available inventory and can request a pending bundle', async (
 	await expect(page).toHaveURL('/bundles');
 	await expect(page.getByText('Bundle 1')).toBeVisible();
 	await expect(page.getByRole('button', { name: 'Expand bundle 1' })).toBeVisible();
-	await expect(page.getByRole('button', { name: 'Mark bundle 1 complete' })).not.toBeVisible();
+	await expect(page.getByRole('button', { name: 'Mark bundle 1 picked up' })).not.toBeVisible();
 });
 
 test('admins can add and remove users', async ({ page }) => {
@@ -170,9 +170,7 @@ test('admins can create, update, cancel, and delete inventory rows', async ({ pa
 		.toBe(false);
 });
 
-test('admins can fulfill pending bundles and committed quantities remain reflected in inventory', async ({
-	page
-}) => {
+test('admins can ready bundles and members can confirm pickup', async ({ page }) => {
 	await loginAs(page, 'Test Member');
 	await page.getByRole('spinbutton', { name: 'Request quantity for Canned tomatoes' }).fill('2');
 	await page.getByRole('button', { name: 'request' }).click();
@@ -184,13 +182,22 @@ test('admins can fulfill pending bundles and committed quantities remain reflect
 
 	await page.getByRole('button', { name: 'Expand bundle 1' }).click();
 	await page.getByRole('spinbutton', { name: 'Quantity for Canned tomatoes' }).fill('1');
-	await page.getByRole('button', { name: 'Mark bundle 1 complete' }).click();
-	await expect(page.getByText('completion pending update')).toBeVisible();
+	await page.getByRole('button', { name: 'Mark bundle 1 ready for pickup' }).click();
+	await expect(page.getByText('ready status pending update')).toBeVisible();
 
+	await page.getByRole('button', { name: 'update' }).click();
+
+	await expect(page.getByText('ready for pickup')).toBeVisible();
+	await page.getByRole('button', { name: 'Log out' }).click();
+	await loginAs(page, 'Test Member');
+	await expect(page.getByLabel('1 bundles ready for pickup')).toBeVisible();
+	await page.getByRole('button', { name: 'Pending bundles' }).click();
+	await page.getByRole('button', { name: 'Mark bundle 1 picked up' }).click();
+	await expect(page.getByText('pickup pending update')).toBeVisible();
 	await page.getByRole('button', { name: 'update' }).click();
 
 	await expect(page.getByText('No pending bundles.')).toBeVisible();
 	await page.getByRole('button', { name: 'Inventory', exact: true }).click();
-	const tomatoesRow = await inventoryRow(page, 'Canned tomatoes');
-	await expect(tomatoesRow.getByRole('spinbutton', { name: 'Quantity' })).toHaveValue('23');
+	await expect(page.getByText('Canned tomatoes')).toBeVisible();
+	await expect(page.getByText('23 count')).toBeVisible();
 });

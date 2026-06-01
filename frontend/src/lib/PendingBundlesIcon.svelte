@@ -12,6 +12,7 @@
 
 	let { apiPath = '/api/bundles', href = '/bundles' }: Props = $props();
 	let openBundleCount = $state(0);
+	let readyBundleCount = $state(0);
 
 	onMount(() => {
 		void loadOpenBundleCount();
@@ -33,9 +34,15 @@
 		if (!response.ok) return;
 
 		const bundles = (await response.json()) as Bundle[];
-		openBundleCount = bundles.filter(
+		const visibleBundles = bundles.filter(
 			(bundle) => currentUser?.role === 'admin' || bundle.user === userId
-		).length;
+		);
+		openBundleCount =
+			currentUser?.role === 'admin'
+				? visibleBundles.length
+				: visibleBundles.filter((bundle) => !bundle.bundled).length;
+		readyBundleCount =
+			currentUser?.role === 'admin' ? 0 : visibleBundles.filter((bundle) => bundle.bundled).length;
 	}
 </script>
 
@@ -52,6 +59,14 @@
 			aria-label={`${openBundleCount} open bundles`}
 		>
 			{openBundleCount}
+		</span>
+	{/if}
+	{#if readyBundleCount > 0}
+		<span
+			class="absolute -right-2 -bottom-2 flex min-w-5 items-center justify-center rounded-full bg-green-600 px-1 text-xs leading-5 font-semibold text-white"
+			aria-label={`${readyBundleCount} bundles ready for pickup`}
+		>
+			{readyBundleCount}
 		</span>
 	{/if}
 </button>
