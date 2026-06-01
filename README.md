@@ -7,7 +7,7 @@ can request inventory to be bundled for pickup.
 
 `docker compose up -d --build`
 
-| **CAUTION**
-| Application is high trust: there is no built-in authentication. You must use some form of authentication
-| on the reverse proxy!
-| Application is not intended to be deployed in a low trust environment.
+> **CAUTION**
+> Application is high trust: there is no built-in authentication. You must use some form of authentication
+> on the reverse proxy!
+> Application is not intended to be deployed in a low trust environment.
