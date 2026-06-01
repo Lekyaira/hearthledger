@@ -1,0 +1,11 @@
+.git
+.gitignore
+.dockerignore
+backend/target
+backend/*.db
+backend/*.db-shm
+backend/*.db-wal
+frontend/node_modules
+frontend/.svelte-kit
+frontend/build
+frontend/test-results
